@@ -1151,6 +1151,16 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
                         inputs_embeds.shape[1], past_len, inputs_embeds.device
                     )
 
+        if self.config._attn_implementation == "flash_attention_2":
+            kv_len = inputs_embeds.shape[1] + (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
+            for mask_key in causal_mask_mapping:
+                if causal_mask_mapping[mask_key] is None:
+                    causal_mask_mapping[mask_key] = torch.ones(
+                        (inputs_embeds.shape[0], kv_len), dtype=torch.bool, device=inputs_embeds.device
+                    )
+
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -1568,6 +1578,17 @@ class Qwen3TTSTalkerModel(Qwen3TTSTalkerTextPreTrainedModel):
         if causal_mask is None and self.config._attn_implementation == "sdpa":
             past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
             causal_mask = _make_sdpa_fallback_mask(inputs_embeds.shape[1], past_len, inputs_embeds.device)
+
+        if causal_mask is None and self.config._attn_implementation == "flash_attention_2":
+            # Force the varlen path in flash-attn which handles GQA natively.
+            # Without a mask flash_attn_func is called directly and some builds
+            # (e.g. community wheels for torch >=2.10) crash on GQA head counts.
+            kv_len = inputs_embeds.shape[1] + (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
+            causal_mask = torch.ones(
+                (inputs_embeds.shape[0], kv_len), dtype=torch.bool, device=inputs_embeds.device
+            )
 
         hidden_states = inputs_embeds
 
