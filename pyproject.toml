@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qwen-tts"
-version = "0.1.1"
-description = "Qwen-TTS python package"
+version = "0.2.0"
+description = "Qwen-TTS python package (fork with updated dependencies)"
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
@@ -20,20 +20,21 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Alibaba Qwen Team" }]
 
 dependencies = [
-  "transformers==4.57.3",
-  "accelerate==1.12.0",
-  "gradio",
-  "librosa",
-  "torchaudio",
-  "soundfile",
-  "sox",
-  "onnxruntime",
-  "einops",
+  "transformers>=4.57.3",
+  "accelerate>=1.12.0",
+  "gradio>=6.12.0",
+  "librosa>=0.11.0",
+  "torchaudio>=2.11.0",
+  "soundfile>=0.13.1",
+  "sox>=1.5.0",
+  "onnxruntime>=1.24.4",
+  "einops>=0.8.2",
+  "safetensors>=0.7.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/Qwen/Qwen3-TTS"
-Repository = "https://github.com/Qwen/Qwen3-TTS"
+Homepage = "https://github.com/tiz-sharp/Qwen3-TTS"
+Repository = "https://github.com/tiz-sharp/Qwen3-TTS"
 
 [project.scripts]
 qwen-tts-demo = "qwen_tts.cli.demo:main"
