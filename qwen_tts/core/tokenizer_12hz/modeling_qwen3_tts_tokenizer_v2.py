@@ -39,7 +39,7 @@ from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
 from transformers.utils import ModelOutput, auto_docstring, logging
 from transformers.utils.deprecation import deprecate_kwarg
-from transformers.utils.generic import check_model_inputs
+from transformers.utils.generic import merge_with_config_defaults
 
 from .configuration_qwen3_tts_tokenizer_v2 import (
     Qwen3TTSTokenizerV2Config,
@@ -503,8 +503,14 @@ class Qwen3TTSTokenizerV2DecoderTransformerModel(Qwen3TTSTokenizerV2DecoderPreTr
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
-    @auto_docstring
+    @merge_with_config_defaults
+    @auto_docstring(
+        custom_intro="""
+        Args:
+            cache_position (`torch.LongTensor`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+        """
+    )
     def forward(
         self,
         input_ids=None,
