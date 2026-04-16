@@ -20,7 +20,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Alibaba Qwen Team" }]
 
 dependencies = [
-  "transformers @ git+https://github.com/tiz-sharp/transformers.git@fix/sdpa-gqa-enable-gqa-fallback",
+  "transformers>=5.5.0",
   "accelerate==1.13.0",
   "gradio==6.12.0",
   "librosa==0.11.0",
