@@ -1710,12 +1710,19 @@ class Qwen3TTSTalkerForConditionalGeneration(Qwen3TTSTalkerTextPreTrainedModel, 
                 inputs_embeds = inputs_embeds + trailing_text_hidden[:, generation_step].unsqueeze(1)
             else:
                 inputs_embeds = inputs_embeds + tts_pad_embed
+        if cache_position is None and past_key_values is not None:
+            past_seen = past_key_values.get_seq_length() if hasattr(past_key_values, 'get_seq_length') else 0
+            seq_len = inputs_embeds.shape[1] if inputs_embeds is not None else (input_ids.shape[1] if input_ids is not None else 0)
+            device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
+            cache_position = torch.arange(past_seen, past_seen + seq_len, device=device)
+
         if attention_mask is not None:
-            if (
+            is_prefill = (
                 cache_position is None
                 or (cache_position is not None and cache_position[0] == 0)
                 or self.rope_deltas is None
-            ):
+            )
+            if is_prefill:
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     attention_mask,
