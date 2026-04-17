@@ -53,11 +53,15 @@ def train():
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
     parser.add_argument("--gradient_checkpointing", action="store_true", default=False)
     parser.add_argument("--log_with", type=str, default=None, choices=[None, "tensorboard", "wandb"])
+    parser.add_argument("--force_cpu", action="store_true", default=False,
+                        help="Force CPU training even when CUDA is available (uses fp32)")
     args = parser.parse_args()
 
-    is_cpu = not torch.cuda.is_available()
+    is_cpu = not torch.cuda.is_available() or args.force_cpu
     mixed_precision = "no" if is_cpu else "bf16"
-    if is_cpu:
+    if args.force_cpu and torch.cuda.is_available():
+        print("[INFO] --force_cpu: CUDA available but forcing CPU training (fp32)")
+    elif is_cpu:
         print("[INFO] CPU detected: disabling bf16 mixed precision (using fp32)")
 
     accel_kwargs = dict(
