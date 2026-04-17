@@ -504,13 +504,7 @@ class Qwen3TTSTokenizerV2DecoderTransformerModel(Qwen3TTSTokenizerV2DecoderPreTr
         self.post_init()
 
     @merge_with_config_defaults
-    @auto_docstring(
-        custom_intro="""
-        Args:
-            cache_position (`torch.LongTensor`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-        """
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids=None,
@@ -522,6 +516,10 @@ class Qwen3TTSTokenizerV2DecoderTransformerModel(Qwen3TTSTokenizerV2DecoderPreTr
         cache_position=None,
         **kwargs,
     ) -> BaseModelOutputWithPast:
+        r"""
+        cache_position (`torch.LongTensor`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence.
+        """
         if input_ids is not None:
             raise ValueError("input_ids is not expected")
         if (input_ids is None) ^ (inputs_embeds is not None):

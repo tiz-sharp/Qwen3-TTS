@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from transformers.configuration_utils import PretrainedConfig, layer_type_validation
+from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_rope_utils import rope_config_validation
 from transformers.utils import logging
 
@@ -252,7 +252,7 @@ class Qwen3TTSTalkerCodePredictorConfig(PretrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        self.validate_layer_type()
         self.num_code_groups = num_code_groups
 
 
