@@ -738,26 +738,6 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, mrope_interle
     return q_embed, k_embed
 
 
-def _make_sdpa_fallback_mask(
-    seq_len: int, past_len: int, device: torch.device
-) -> torch.Tensor:
-    """Create an explicit bool mask for SDPA to force the repeat_kv path.
-
-    When ``create_causal_mask`` returns ``None`` (no padding, standard causal),
-    ``sdpa_attention_forward`` passes ``enable_gqa=True`` to PyTorch's SDPA.
-    Some PyTorch versions (notably 2.10) fall back to the math backend which
-    does **not** support ``enable_gqa``, causing a bmm dimension mismatch on
-    GQA models.  Providing a non-``None`` mask forces the ``repeat_kv`` path
-    instead, which is always safe.
-    """
-    kv_len = seq_len + past_len
-    if seq_len > 1:
-        row_idx = torch.arange(seq_len, device=device).unsqueeze(1) + past_len
-        col_idx = torch.arange(kv_len, device=device).unsqueeze(0)
-        return (col_idx <= row_idx).unsqueeze(0).unsqueeze(0)  # [1, 1, seq, kv]
-    return torch.ones((1, 1, 1, kv_len), dtype=torch.bool, device=device)
-
-
 class Qwen3TTSTalkerAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1142,24 +1122,6 @@ class Qwen3TTSTalkerCodePredictorModel(Qwen3TTSPreTrainedModel):
             # The sliding window alternating layers are not always activated depending on the config
             if self.has_sliding_layers:
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-
-        if self.config._attn_implementation == "sdpa":
-            past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
-            for mask_key in causal_mask_mapping:
-                if causal_mask_mapping[mask_key] is None:
-                    causal_mask_mapping[mask_key] = _make_sdpa_fallback_mask(
-                        inputs_embeds.shape[1], past_len, inputs_embeds.device
-                    )
-
-        if self.config._attn_implementation == "flash_attention_2":
-            kv_len = inputs_embeds.shape[1] + (
-                past_key_values.get_seq_length() if past_key_values is not None else 0
-            )
-            for mask_key in causal_mask_mapping:
-                if causal_mask_mapping[mask_key] is None:
-                    causal_mask_mapping[mask_key] = torch.ones(
-                        (inputs_embeds.shape[0], kv_len), dtype=torch.bool, device=inputs_embeds.device
-                    )
 
         hidden_states = inputs_embeds
 
@@ -1574,21 +1536,6 @@ class Qwen3TTSTalkerModel(Qwen3TTSTalkerTextPreTrainedModel):
             past_key_values=past_key_values,
             position_ids=text_position_ids,
         )
-
-        if causal_mask is None and self.config._attn_implementation == "sdpa":
-            past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
-            causal_mask = _make_sdpa_fallback_mask(inputs_embeds.shape[1], past_len, inputs_embeds.device)
-
-        if causal_mask is None and self.config._attn_implementation == "flash_attention_2":
-            # Force the varlen path in flash-attn which handles GQA natively.
-            # Without a mask flash_attn_func is called directly and some builds
-            # (e.g. community wheels for torch >=2.10) crash on GQA head counts.
-            kv_len = inputs_embeds.shape[1] + (
-                past_key_values.get_seq_length() if past_key_values is not None else 0
-            )
-            causal_mask = torch.ones(
-                (inputs_embeds.shape[0], kv_len), dtype=torch.bool, device=inputs_embeds.device
-            )
 
         hidden_states = inputs_embeds
 
