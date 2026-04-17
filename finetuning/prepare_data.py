@@ -17,21 +17,33 @@
 import argparse
 import json
 
+import torch
 from qwen_tts import Qwen3TTSTokenizer
 
 BATCH_INFER_NUM = 32
 
+
+def _detect_device():
+    if torch.cuda.is_available():
+        return "cuda:0"
+    return "cpu"
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="cuda:0")
+    parser.add_argument("--device", type=str, default=None,
+                        help="Device for tokenizer (auto-detects cuda/cpu if omitted)")
     parser.add_argument("--tokenizer_model_path", type=str, default="Qwen/Qwen3-TTS-Tokenizer-12Hz")
     parser.add_argument("--input_jsonl", type=str, required=True)
     parser.add_argument("--output_jsonl", type=str, required=True)
     args = parser.parse_args()
 
+    device = args.device if args.device else _detect_device()
+    print(f"[INFO] Tokenizer device: {device}")
+
     tokenizer_12hz = Qwen3TTSTokenizer.from_pretrained(
         args.tokenizer_model_path,
-        device_map=args.device,
+        device_map=device,
     )
 
     total_lines = open(args.input_jsonl).readlines()
@@ -66,6 +78,9 @@ def main():
     with open(args.output_jsonl, 'w') as f:
         for line in final_lines:
             f.writelines(line + '\n')
+
+    print(f"[INFO] Processed {len(final_lines)} samples -> {args.output_jsonl}")
+
 
 if __name__ == "__main__":
     main()

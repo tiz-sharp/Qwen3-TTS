@@ -30,6 +30,8 @@ AudioLike = Union[
 
 MaybeList = Union[Any, List[Any]]
 
+TARGET_SR = 24000
+
 class TTSDataset(Dataset):
     def __init__(self, data_list, processor, config:Qwen3TTSConfig, lag_num = -1):
         self.data_list = data_list
@@ -41,11 +43,14 @@ class TTSDataset(Dataset):
         return len(self.data_list)
     
     def _load_audio_to_np(self, x: str) -> Tuple[np.ndarray, int]:
-        
         audio, sr = librosa.load(x, sr=None, mono=True)
 
         if audio.ndim > 1:
             audio = np.mean(audio, axis=-1)
+
+        if sr != TARGET_SR:
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=TARGET_SR)
+            sr = TARGET_SR
 
         return audio.astype(np.float32), int(sr)
 
@@ -80,7 +85,10 @@ class TTSDataset(Dataset):
             if isinstance(a, str):
                 out.append(self._load_audio_to_np(a))
             elif isinstance(a, tuple) and len(a) == 2 and isinstance(a[0], np.ndarray):
-                out.append((a[0].astype(np.float32), int(a[1])))
+                wav, orig_sr = a[0].astype(np.float32), int(a[1])
+                if orig_sr != TARGET_SR:
+                    wav = librosa.resample(wav, orig_sr=orig_sr, target_sr=TARGET_SR)
+                out.append((wav, TARGET_SR))
             elif isinstance(a, np.ndarray):
                 raise ValueError("For numpy waveform input, pass a tuple (audio, sr).")
             else:
@@ -102,12 +110,14 @@ class TTSDataset(Dataset):
     
     @torch.inference_mode()
     def extract_mels(self, audio, sr):
-        assert sr == 24000, "Only support 24kHz audio"
+        if sr != TARGET_SR:
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=TARGET_SR)
+            sr = TARGET_SR
         mels = mel_spectrogram(
             torch.from_numpy(audio).unsqueeze(0), 
             n_fft=1024, 
             num_mels=128, 
-            sampling_rate=24000,
+            sampling_rate=TARGET_SR,
             hop_size=256, 
             win_size=1024, 
             fmin=0, 

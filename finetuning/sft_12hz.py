@@ -29,6 +29,16 @@ from torch.utils.data import DataLoader
 from transformers import AutoConfig
 
 target_speaker_embedding = None
+
+
+def _detect_attn_implementation():
+    try:
+        import flash_attn  # noqa: F401
+        return "flash_attention_2"
+    except ImportError:
+        return "sdpa"
+
+
 def train():
     global target_speaker_embedding
 
@@ -40,16 +50,38 @@ def train():
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--num_epochs", type=int, default=3)
     parser.add_argument("--speaker_name", type=str, default="speaker_test")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
+    parser.add_argument("--gradient_checkpointing", action="store_true", default=False)
+    parser.add_argument("--log_with", type=str, default=None, choices=[None, "tensorboard", "wandb"])
     args = parser.parse_args()
 
-    accelerator = Accelerator(gradient_accumulation_steps=4, mixed_precision="bf16", log_with="tensorboard")
+    is_cpu = not torch.cuda.is_available()
+    mixed_precision = "no" if is_cpu else "bf16"
+    if is_cpu:
+        print("[INFO] CPU detected: disabling bf16 mixed precision (using fp32)")
+
+    accel_kwargs = dict(
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        mixed_precision=mixed_precision,
+    )
+    if args.log_with:
+        accel_kwargs["log_with"] = args.log_with
+        accel_kwargs["project_dir"] = os.path.join(args.output_model_path, "logs")
+
+    accelerator = Accelerator(**accel_kwargs)
+
+    if args.log_with:
+        accelerator.init_trackers("qwen3_tts_sft")
 
     MODEL_PATH = args.init_model_path
+    attn_impl = _detect_attn_implementation()
+    model_dtype = torch.float32 if is_cpu else torch.bfloat16
+    print(f"[INFO] attn_implementation={attn_impl}, dtype={model_dtype}, device={'cpu' if is_cpu else 'cuda'}")
 
     qwen3tts = Qwen3TTSModel.from_pretrained(
         MODEL_PATH,
-        dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
+        dtype=model_dtype,
+        attn_implementation=attn_impl,
     )
     config = AutoConfig.from_pretrained(MODEL_PATH)
 
@@ -63,6 +95,9 @@ def train():
     model, optimizer, train_dataloader = accelerator.prepare(
         qwen3tts.model, optimizer, train_dataloader
     )
+
+    if args.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
 
     num_epochs = args.num_epochs
     model.train()
@@ -87,7 +122,9 @@ def train():
                 input_text_ids = input_ids[:, :, 0]
                 input_codec_ids = input_ids[:, :, 1]
 
-                input_text_embedding = model.talker.model.text_embedding(input_text_ids) * text_embedding_mask
+                input_text_embedding = model.talker.text_projection(
+                    model.talker.model.text_embedding(input_text_ids)
+                ) * text_embedding_mask
                 input_codec_embedding = model.talker.model.codec_embedding(input_codec_ids) * codec_embedding_mask
                 input_codec_embedding[:, 6, :] = speaker_embedding
 
@@ -158,6 +195,10 @@ def train():
             state_dict['talker.model.codec_embedding.weight'][3000] = target_speaker_embedding[0].detach().to(weight.device).to(weight.dtype)
             save_path = os.path.join(output_dir, "model.safetensors")
             save_file(state_dict, save_path)
+
+    if args.log_with:
+        accelerator.end_training()
+
 
 if __name__ == "__main__":
     train()
